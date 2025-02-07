@@ -19,7 +19,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req: Request, res: Response) => {
-    res.json({ message: 'HODL SERVER' });
+    res.json({ message: 'HodlStake API SERVER' });
 });
 
 // @ts-ignore
