@@ -19,7 +19,7 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 
-const allowedOrigin = "http://localhost:3000";
+// const allowedOrigin = ["https://amir5000.com", "https://www.amir5000.com"];
 
 // app.use(
 //     cors({
@@ -55,10 +55,6 @@ const limiter = rateLimit({
 });
 
 app.use(limiter);
-
-app.get("/", (req, res) => {
-    res.json({ message: "HodlStake" });
-});
 
 app.get("/api", (req, res) => {
     res.json({ message: "HodlStake API" });
