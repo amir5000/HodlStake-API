@@ -4,6 +4,7 @@ import { useGetMarkets } from "@/services/reactQuery/useGetMarkets"
 import { useAtomValue } from "jotai"
 import Loader from "./Loader"
 import WalletConnectButton from "./WalletConnectButton"
+import hodlLogo from "@/assets/hodl-logo.png"
 
 export default function Header() {
     const state = useAtomValue(stateAtom)
@@ -34,7 +35,7 @@ export default function Header() {
             <div className="container mx-auto flex justify-between items-center py-4">
                 <div className="flex items-center gap-4">
                     <Link to="/">
-                        <img src="/src/assets/hodl-logo.png" alt="Hodl" className="w-22" />
+                        <img src={hodlLogo} alt="Hodl" className="w-22" />
                     </Link>
                 </div>
                 <div className="flex items-center gap-4">
