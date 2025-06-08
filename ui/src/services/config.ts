@@ -1,5 +1,5 @@
 export default {
     api: {
-        baseUrl: process.env.API_URL,
+        baseUrl: import.meta.env.API_URL,
     },
 } as const
