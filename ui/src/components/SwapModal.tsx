@@ -212,11 +212,13 @@ export default function SwapModal() {
                                     <SelectValue placeholder="Select Asset" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-charcoal">
-                                    {markets?.markets.map((market) => (
-                                        <SelectItem key={market.address} value={market.pt}>
-                                            {market.name}
-                                        </SelectItem>
-                                    ))}
+                                    {markets &&
+                                        markets.markets &&
+                                        markets.markets.map((market) => (
+                                            <SelectItem key={market.address} value={market.pt}>
+                                                {market.name}
+                                            </SelectItem>
+                                        ))}
                                 </SelectContent>
                             </Select>
                             {findAsset ? <p className="text-sm">Unlock {dayjs(findAsset?.expiry).format("MM/DD/YYYY")}</p> : null}
