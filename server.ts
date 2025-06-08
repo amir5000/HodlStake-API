@@ -54,6 +54,11 @@ const limiter = rateLimit({
     legacyHeaders: false,
 });
 
+app.use((req, _res, next) => {
+    console.log("[REQ]", req.method, req.url); // will print each incoming path
+    next();
+});
+
 app.use(limiter);
 
 app.get("/api", (req, res) => {
