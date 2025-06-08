@@ -1,5 +1,5 @@
 export default {
     api: {
-        baseUrl: "http://localhost:3000/api",
-    },    
-} as const;
+        baseUrl: process.env.API_URL,
+    },
+} as const

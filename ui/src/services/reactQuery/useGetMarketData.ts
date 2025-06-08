@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import apiInstance from "../apiInstance"
-import type { Market, MarketDataResponse } from "@/types"
+import type { MarketDataResponse } from "@/types"
 
 export function useGetMarketData({ chainId, marketAddress }: { chainId: number; marketAddress: string }) {
     return useQuery({
