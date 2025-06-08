@@ -18,6 +18,7 @@ import useGetTangoCards from "@/services/reactQuery/useGetTangoCards"
 import useGetTangoAuthToken from "@/services/reactQuery/useGetTangoAuthToken"
 import ConfirmationStep from "./ConfirmationStep"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion"
+import arrowIcon from "@/assets/arrow-Icon.svg"
 
 export default function SwapModal() {
     const [selectedAsset, setSelectedAsset] = useState("")
@@ -231,7 +232,7 @@ export default function SwapModal() {
                         </div>
                     </div>
                     <div className="flex flex-col w-full h-2 z-30 items-center justify-center">
-                        <img src="/src/assets/arrow-Icon.svg" alt="arrow" className="w-10 h-10 rounded-full bg-hodl-pink p-2" />
+                        <img src={arrowIcon} alt="arrow" className="w-10 h-10 rounded-full bg-hodl-pink p-2" />
                     </div>
                     <div className="bg-[#1F1F1F] rounded-xl pt-12">
                         <div className="flex flex-row gap-12 px-8 mb-6">
