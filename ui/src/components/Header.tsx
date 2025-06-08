@@ -19,13 +19,15 @@ export default function Header() {
                         <div>
                             <p className="text-sm">Current Lock Rates</p>
                         </div>
-                        {markets?.markets.map((market) => (
-                            <div key={market.address}>
-                                <p className="text-sm">
-                                    {market.name}: <span className="text-neon">{Number(market.details.impliedApy * 100).toFixed(2)}%</span>
-                                </p>
-                            </div>
-                        ))}
+                        {markets &&
+                            markets.markets &&
+                            markets.markets.map((market) => (
+                                <div key={market.address}>
+                                    <p className="text-sm">
+                                        {market.name}: <span className="text-neon">{Number(market.details.impliedApy * 100).toFixed(2)}%</span>
+                                    </p>
+                                </div>
+                            ))}
                     </>
                 )}
             </div>
