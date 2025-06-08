@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import apiInstance from "../apiInstance"
-import type { Market, SwapTokenForPTResponse } from "@/types"
+import type { SwapTokenForPTResponse } from "@/types"
 
 export function useGetSwapQuote({
     chainId,

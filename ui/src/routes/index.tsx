@@ -5,8 +5,7 @@ import { stateAtom } from "@/services/jotai"
 import { useEffect } from "react"
 
 export default function Home() {
-    const { address, isConnecting, isDisconnected } = useAccount()
-    console.log(address)
+    const { address } = useAccount()
 
     const [state, setState] = useAtom(stateAtom)
 
