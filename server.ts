@@ -2,8 +2,15 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import { mintPyFromToken } from "./pendle/mintPyFromToken";
-import { getSigner, getTokenABI } from "./helpers";
-import { Contract, parseUnits } from "ethers";
+import { getSigner, getTokenABI, getTransfers } from "./helpers";
+import { Contract, parseUnits, verifyMessage } from "ethers";
+import { getCustomerMetaFields } from "./shopify/getCustomerMetaFields";
+import { setCustomerMetaField } from "./shopify/setCustomerMetaField";
+import { deleteCustomerMetaFieldById } from "./shopify/deleteCustomerMetaFieldById";
+import helmet from "helmet";
+import { swapTokenForPT } from "./pendle/swapTokenForPT";
+import rateLimit from "express-rate-limit";
+import { marketData } from "./pendle/marketData";
 
 dotenv.config();
 
@@ -12,14 +19,42 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 
-const corsOptions = {
-    origin: ["https://hodlstake.myshopify.com"], // Replace with your frontend URL
-    optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
-};
+const allowedOrigin = "http://localhost:3000";
 
-app.use(cors(corsOptions));
+// app.use(
+//     cors({
+//         origin: (origin, callback) => {
+//             console.log("origin: ", origin);
+//             if (!origin || allowedOrigin.includes(origin)) {
+//                 callback(null, true);
+//             } else {
+//                 callback(new Error("Not allowed by CORS"));
+//             }
+//         },
+//     })
+// );
+
+// app.use((req, res, next): any => {
+//     const origin = req.get("origin");
+//     console.log("origin: ", origin);
+//     if (!origin || origin !== allowedOrigin) {
+//         return res.status(403).send("Access denied");
+//     }
+//     next();
+// });
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(helmet());
+const limiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minutes
+    max: 60, // Limit each IP to 60 requests per windowMs
+    message: "Too many requests, please try again later.",
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use(limiter);
 
 app.get("/", (req, res) => {
     res.json({ message: "HodlStake" });
@@ -29,7 +64,7 @@ app.get("/api", (req, res) => {
     res.json({ message: "HodlStake API" });
 });
 
-app.get("/api/auth", async (req, res): Promise<void> => {
+app.get("/api/tangocard/auth", async (req, res): Promise<void> => {
     const options = {
         method: "POST",
         headers: {
@@ -77,7 +112,7 @@ app.get("/api/catalogs", async (req, res): Promise<void> => {
     };
 
     try {
-        const response = await fetch("https://integration-api.tangocard.com/raas/v2/catalogs?verbose=true", options);
+        const response = await fetch(`${process.env.TANGO_API_URL}/catalogs?verbose=true`, options);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -109,7 +144,7 @@ app.get("/api/accounts", async (req, res): Promise<void> => {
     };
 
     try {
-        const response = await fetch("https://integration-api.tangocard.com/raas/v2/accounts", options);
+        const response = await fetch(`${process.env.TANGO_API_URL}/accounts`, options);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -141,7 +176,7 @@ app.get("/api/customers", async (req, res): Promise<void> => {
     };
 
     try {
-        const response = await fetch("https://integration-api.tangocard.com/raas/v2/customers", options);
+        const response = await fetch(`${process.env.TANGO_API_URL}/customers`, options);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -158,13 +193,55 @@ app.get("/api/customers", async (req, res): Promise<void> => {
     }
 });
 
-app.get("/api/markets/:chainId", async (req, res): Promise<void> => {
-    const { chainId } = req.params;
+app.get("/api/customer/:customerId/metafields", async (req, res): Promise<void> => {
+    const { customerId } = req.params;
 
-    if (!chainId) {
-        res.status(400).json({ error: "Missing chainId parameter" });
+    const customerMetaFields = await getCustomerMetaFields({ customerId });
+    if (!customerMetaFields) {
+        res.status(500).json({ error: "Failed to fetch customer meta fields" });
         return;
     }
+
+    res.json(customerMetaFields);
+});
+
+app.post("/api/customer/:customerId/metafields", async (req, res): Promise<void> => {
+    const { customerId } = req.params;
+
+    const reqBody: {
+        key: string;
+        value: string;
+        type: string;
+        namespace: string;
+    } = req.body;
+
+    const body = {
+        metafield: reqBody,
+    };
+
+    const customerMetaFields = await setCustomerMetaField({ customerId, body });
+    if (!customerMetaFields) {
+        res.status(500).json({ error: "Failed to save customer meta fields" });
+        return;
+    }
+
+    res.json(customerMetaFields);
+});
+
+app.delete("/api/customer/:customerId/metafields/:metafieldId", async (req, res): Promise<void> => {
+    const { customerId, metafieldId } = req.params;
+
+    const customerMetaFields = await deleteCustomerMetaFieldById({ customerId, metafieldId });
+    if (!customerMetaFields) {
+        res.status(500).json({ error: "Failed to delete customer meta fields" });
+        return;
+    }
+
+    res.json(customerMetaFields);
+});
+
+app.get("/api/markets/:chainId", async (req, res): Promise<void> => {
+    const { chainId } = req.params;
 
     const url = `${process.env.HOSTED_SDK_URL}v1/${chainId}/markets/active`;
 
@@ -187,44 +264,91 @@ app.get("/api/markets/:chainId", async (req, res): Promise<void> => {
     }
 });
 
+app.post("/api/markets/:chainId/:marketAddress/swap", async (req, res): Promise<void> => {
+    const { chainId, marketAddress } = req.params;
+    const { tokenIn, tokenOut, amountIn, receiver } = req.body;
+
+    if (!tokenIn || !tokenOut) {
+        res.status(400).json({ error: "Missing required fields" });
+        return;
+    }
+
+    // const signer = getSigner();
+    // const tokenOutContract = new Contract(tokenOut, getTokenABI(), signer);
+    // console.log("tokenOutDecimals: ", tokenOutDecimals);
+
+    const response = await swapTokenForPT({
+        chainId,
+        receiver,
+        marketAddress,
+        tokenIn,
+        tokenOut,
+        amountIn,
+    });
+
+    res.json(response);
+});
+
+app.get("/api/markets/:chainId/:marketAddress/data", async (req, res): Promise<void> => {
+    const { chainId, marketAddress } = req.params;
+
+    const response = await marketData({
+        chainId,
+        marketAddress,
+    });
+
+    res.json(response);
+});
+
+app.get("/api/transfer/:txHash", async (req, res): Promise<void> => {
+    const { txHash } = req.params;
+    const transfers = await getTransfers(txHash);
+    res.json(transfers);
+});
+
 app.post("/api/mint/:chainId", async (req, res): Promise<void> => {
     const { chainId } = req.params;
+
     const {
-        receiverAddress,
+        receiver,
         amountIn,
-        tokenInAddress,
-        ytAddress,
+        tokenIn,
+        yt,
+        txHash,
+        decimals,
     }: {
-        receiverAddress: string;
+        receiver: string;
         amountIn: string;
-        tokenInAddress: string;
-        ytAddress: string;
+        tokenIn: string;
+        yt: string;
+        txHash: string;
+        txStatus: string;
+        decimals: string;
     } = req.body;
 
-    if (!receiverAddress || !amountIn || !tokenInAddress || !ytAddress) {
+    if (!receiver || !amountIn || !tokenIn || !yt) {
         res.status(400).json({
-            error: `missing ${!receiverAddress ? "receiverAddress " : ""}${!amountIn ? "amountIn " : ""}${!tokenInAddress ? "tokenInAddress " : ""}
-${!ytAddress ? "ytAddress " : ""}
+            error: `missing ${!receiver ? "receiver " : ""}${!amountIn ? "amountIn " : ""}${!tokenIn ? "tokenIn " : ""}
+${!yt ? "yt " : ""}${!txHash ? "txHash " : ""}
             `,
         });
         return;
     }
 
-    const signer = getSigner();
-    const mainAddress = await signer.getAddress();
-    const token = new Contract(tokenInAddress, getTokenABI(), signer);
-    const ytToken = new Contract(ytAddress, getTokenABI(), signer);
-    const decimals = await token.decimals();
-    const ytTokenDecimals = await ytToken.decimals();
-
+    // const signer = getSigner();
+    // const mainAddress = await signer.getAddress();
+    // const token = tokenInAddress === "0x0000000000000000000000000000000000000000" ? null : new Contract(tokenInAddress, getTokenABI(), signer);
+    // const ytToken = new Contract(ytAddress, getTokenABI(), signer);
+    // const decimals = token ? await token.decimals() : 18;
+    // const ytTokenDecimals = await ytToken.decimals();
     const response = await mintPyFromToken({
-        receiver: mainAddress,
-        yt: ytAddress,
-        tokenIn: tokenInAddress,
+        receiver,
+        yt,
+        tokenIn,
         amountIn,
         slippage: "0.01",
-        chainId: chainId,
-        decimals: String(decimals) || "18", // Assuming 18 decimals for the token
+        chainId,
+        decimals, // Assuming 18 decimals for the token
     });
 
     if (!response) {
@@ -232,58 +356,61 @@ ${!ytAddress ? "ytAddress " : ""}
         return;
     }
 
-    console.log("response: ", response);
+    res.json(response);
+    // return;
 
-    const amount = parseUnits(amountIn, decimals);
-    console.log("amount: ", amount);
+    // console.log("response: ", response);
 
-    const spender = response.tx.to;
-    console.log("spender: ", spender);
+    // const amount = parseUnits(amountIn, decimals);
+    // console.log("amount: ", amount);
 
-    const current = await token.allowance(mainAddress, spender);
-    console.log("current: ", current);
+    // const spender = response.tx.to;
+    // console.log("spender: ", spender);
 
-    if (BigInt(current) <= BigInt(amount)) {
-        const approveTx = await token.approve(spender, amount);
-        console.log(`Waiting for approve… ${approveTx.hash}`);
-        await approveTx.wait();
-    }
+    // const current = token ? await token.allowance(mainAddress, spender) : BigInt(0);
+    // console.log("current: ", current);
 
-    const ytTokeBalance = await ytToken.balanceOf(mainAddress);
-    console.log("ytTokeBalance: ", ytTokeBalance);
+    // if (token && BigInt(current) <= BigInt(amount)) {
+    //     const approveTx = await token.approve(spender, amount);
+    //     console.log(`Waiting for approve… ${approveTx.hash}`);
+    //     await approveTx.wait();
+    // }
 
-    // res.json({ response });
+    // const ytTokeBalance = await ytToken.balanceOf(mainAddress);
+    // console.log("ytTokeBalance: ", ytTokeBalance);
 
-    const sendTx = await signer.sendTransaction(response.tx);
-    console.log(`Waiting for transaction… ${sendTx.hash}`);
+    // // res.json({ response });
 
-    const mintTX = await sendTx.wait();
+    // const sendTx = await signer.sendTransaction(response.tx);
+    // console.log(`Waiting for transaction… ${sendTx.hash}`);
 
-    if (!mintTX) {
-        res.status(500).json({ error: "Transaction failed" });
-        return;
-    }
+    // const mintTX = await sendTx.wait();
 
-    console.log("Transaction successful:", mintTX.hash);
-    console.log("Transaction details:", mintTX);
+    // if (!mintTX) {
+    //     res.status(500).json({ error: "Transaction failed" });
+    //     return;
+    // }
 
-    const amountInUnits = BigInt(response.data.amountOut);
-    console.log("amountInUnits: ", amountInUnits);
+    // console.log("Transaction successful:", mintTX.hash);
+    // console.log("Transaction details:", mintTX);
 
-    const gasLimit = await ytToken.transfer.estimateGas(receiverAddress, amountInUnits);
-    console.log("gasLimit: ", gasLimit);
+    // const amountInUnits = BigInt(response.data.amountOut);
+    // console.log("amountInUnits: ", amountInUnits);
 
-    const transferTX = await ytToken.transfer(receiverAddress, amountInUnits, { gasLimit });
+    // const gasLimit = await ytToken.transfer.estimateGas(receiverAddress, amountInUnits);
+    // console.log("gasLimit: ", gasLimit);
 
-    console.log(`Waiting for transfer… ${transferTX.hash}`);
-    const transferReceipt = await transferTX.wait();
+    // const transferTX = await ytToken.transfer(receiverAddress, amountInUnits, { gasLimit });
 
-    if (!transferReceipt) {
-        res.status(500).json({ error: "Transfer transaction failed" });
-        return;
-    }
+    // console.log(`Waiting for transfer… ${transferTX.hash}`);
+    // const transferReceipt = await transferTX.wait();
 
-    console.log("Transfer details:", transferReceipt);
+    // if (!transferReceipt) {
+    //     res.status(500).json({ error: "Transfer transaction failed" });
+    //     return;
+    // }
+
+    // console.log("Transfer details:", transferReceipt);
 
     // res.json({ response, mintTX, transferReceipt });
 });
@@ -294,10 +421,79 @@ app.post("/api/create-orders", async (req, res): Promise<void> => {
         return;
     }
 
-    const body = req.body;
+    const body: {
+        firstName: string;
+        lastName: string;
+        email: string;
+        customerIdentifier: string;
+        accountIdentifier: string;
+        utid: string;
+        amount: string;
+        customerId: string;
+    } = req.body;
 
-    if (!body.firstName || !body.lastName || !body.email || !body.customerIdentifier || !body.accountIdentifier || !body.utid || !body.amount) {
+    if (
+        !body.firstName ||
+        !body.lastName ||
+        !body.email ||
+        !body.customerIdentifier ||
+        !body.accountIdentifier ||
+        !body.utid ||
+        !body.amount ||
+        !body.customerId
+    ) {
         res.status(400).json({ error: "Missing required fields" });
+        return;
+    }
+
+    const customerMetaFields = await getCustomerMetaFields({ customerId: body.customerId });
+    console.log("customerMetaFields: ", customerMetaFields);
+    if (!customerMetaFields) {
+        res.status(500).json({ error: "Failed to fetch customer meta fields" });
+        return;
+    }
+
+    const customerMetaField =
+        customerMetaFields.metafields[customerMetaFields.metafields.length - 1] &&
+        customerMetaFields.metafields[customerMetaFields.metafields.length - 1].key.includes("reward_points") &&
+        customerMetaFields.metafields[customerMetaFields.metafields.length - 1].value
+            ? customerMetaFields.metafields[customerMetaFields.metafields.length - 1]
+            : null;
+
+    if (!customerMetaField) {
+        res.status(500).json({ error: "Failed to fetch current reward points meta field" });
+        return;
+    }
+
+    const isValueLessThanAmount = Number(customerMetaField.value) < Number(body.amount);
+
+    if (isValueLessThanAmount) {
+        res.status(400).json({ error: "Insufficient balance" });
+        return;
+    }
+
+    const newBalance = Number(customerMetaField.value) - Number(body.amount);
+
+    const metaFieldBody = {
+        key: `reward_points${Date.now()}`,
+        value: newBalance.toString(),
+        type: "string",
+        namespace: "global",
+    };
+
+    const updatedCustomerMetaFieldBody = {
+        metafield: metaFieldBody,
+    };
+
+    const updatedCustomerMetaField = await setCustomerMetaField({
+        customerId: body.customerId,
+        body: updatedCustomerMetaFieldBody,
+    });
+
+    console.log("updatedCustomerMetaField: ", updatedCustomerMetaField);
+
+    if (!updatedCustomerMetaField) {
+        res.status(500).json({ error: "Failed to update customer meta field" });
         return;
     }
 
@@ -322,7 +518,7 @@ app.post("/api/create-orders", async (req, res): Promise<void> => {
     };
 
     try {
-        const response = await fetch("https://integration-api.tangocard.com/raas/v2/orders", options);
+        const response = await fetch(`${process.env.TANGO_API_URL}/orders`, options);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -365,7 +561,7 @@ app.post("/api/create-orders", async (req, res): Promise<void> => {
             },
         };
 
-        const shopifyResponse = await fetch("https://hodlstake.myshopify.com/admin/api/2025-01/orders.json", {
+        const shopifyResponse = await fetch(`${process.env.SHOPIFY_STOREFRONT_API_URL}/orders.json`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",

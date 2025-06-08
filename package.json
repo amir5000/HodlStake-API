@@ -1,27 +1,29 @@
 {
-  "name": "hodl-server",
-  "version": "1.0.1",
-  "description": "",
-  "main": "server.ts",
-  "scripts": {
-    "start": "npx tsx --env-file=.env --watch server.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "AAA",
-  "license": "ISC",
-  "type": "module",
-  "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "ethers": "^6.13.7",
-    "express": "^5.1.0"
-  },
-  "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.1",
-    "@types/node": "^22.13.1",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.7.3"
-  }
+    "name": "hodl-server",
+    "version": "1.0.1",
+    "description": "",
+    "main": "server.ts",
+    "scripts": {
+        "start": "npx tsx --env-file=.env --watch server.ts",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "AAA",
+    "license": "ISC",
+    "type": "module",
+    "dependencies": {
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.7",
+        "ethers": "^6.13.7",
+        "express": "^5.1.0",
+        "express-rate-limit": "^7.5.0",
+        "helmet": "^8.1.0"
+    },
+    "devDependencies": {
+        "@types/cors": "^2.8.17",
+        "@types/express": "^5.0.1",
+        "@types/node": "^22.13.1",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.7.3"
+    }
 }
