@@ -41,8 +41,8 @@ export default function SwapModal() {
 
     const { data: markets, isLoading: marketsIsLoading } = useGetMarkets(chainId)
 
-    const findAsset = markets?.markets.find((market) => market.pt === selectedAsset)
-    const findAssetIndex = markets?.markets.findIndex((market) => market.pt === selectedAsset) || 0
+    const findAsset = markets && markets.markets && markets.markets.find((market) => market.pt === selectedAsset)
+    const findAssetIndex = (markets && markets.markets && markets.markets.findIndex((market) => market.pt === selectedAsset)) || 0
 
     const { data: marketData } = useGetMarketData({
         chainId,
@@ -51,7 +51,9 @@ export default function SwapModal() {
 
     const contracts =
         (address &&
-            markets?.markets.map((market) => ({
+            markets &&
+            markets.markets &&
+            markets.markets.map((market) => ({
                 address: market.name.includes("USDC") ? chains[chainId].USDCAddress : market.underlyingAsset.split("-")[1],
                 abi: erc20Abi,
                 functionName: "balanceOf",
@@ -60,11 +62,14 @@ export default function SwapModal() {
         ([] as any)
 
     const contractsDecimals =
-        markets?.markets.map((market) => ({
-            address: market.name.includes("USDC") ? chains[chainId].USDCAddress : market.underlyingAsset.split("-")[1],
-            abi: erc20Abi,
-            functionName: "decimals",
-        })) || ([] as any)
+        (markets &&
+            markets.markets &&
+            markets.markets.map((market) => ({
+                address: market.name.includes("USDC") ? chains[chainId].USDCAddress : market.underlyingAsset.split("-")[1],
+                abi: erc20Abi,
+                functionName: "decimals",
+            }))) ||
+        ([] as any)
 
     const { data: balanceResults } = useReadContracts({
         contracts,
