@@ -6,11 +6,8 @@
     "strict": true,
     "lib": ["ESNext", "DOM"],
     "esModuleInterop": true,
-    "skipLibCheck": true,
-    "paths": {
-      "@/*": ["./ui/src/*"]
-    }
+    "skipLibCheck": true
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "ui", "ui/**/*"]
 }
